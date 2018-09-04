@@ -8,13 +8,16 @@ Ext.define('CustomApp', {
     _endDate: undefined,
 
     _releaseId: undefined,
+    _releaseName: undefined,
     _milestoneId: undefined,
     _iterationId: undefined,
+    _iterationName: undefined,
 
     _initItems: undefined,
     _endItems: undefined,
 
     _searchParameter: undefined,
+    _addedChangedParameter: undefined,
 
     items:[
         {
@@ -75,6 +78,7 @@ Ext.define('CustomApp', {
 			width: 400,
 			itemId: 'releasaeComboBox',
 			allowClear: true,
+			showArrows: false,
 			scope: this,
 			listeners: {
 				ready: function(combobox) {
@@ -83,6 +87,7 @@ Ext.define('CustomApp', {
 					//this._initDate = Rally.util.DateTime.toIsoString(release.get('ReleaseStartDate'),true);
 					//this._endDate = Rally.util.DateTime.toIsoString(release.get('ReleaseDate'),true);
 					this._releaseId = release.get('ObjectID');
+					this._releaseName = combobox.getRecord().get('Name');  
 				},
 				select: function(combobox, records) {
 					var release = records[0];
@@ -90,6 +95,7 @@ Ext.define('CustomApp', {
 					//this._initDate = Rally.util.DateTime.toIsoString(release.get('ReleaseStartDate'),true);
 					//this._endDate = Rally.util.DateTime.toIsoString(release.get('ReleaseDate'),true);
 					this._releaseId = release.get('ObjectID');
+					this._releaseName = combobox.getRecord().get('Name');  
 				},
 				scope: this
 			}
@@ -100,15 +106,19 @@ Ext.define('CustomApp', {
 			width: 400,
             itemId: 'iterationComboBox',
             allowClear: true,
+            showArrows: false,
             scope: this,
             listeners: {
                 ready: function(combobox) {
                 	var iteration = combobox.getRecord();
                 	this._iterationId = iteration.get('ObjectID');
+                	this._iterationName = iteration.get('Name');
+
                 },
                 select: function(combobox, records, opts) {
                     var iteration = records[0];
                 	this._iterationId = iteration.get('ObjectID');
+                	this._iterationName = iteration.get('Name');
                 },
                 scope: this
             }
@@ -139,7 +149,7 @@ Ext.define('CustomApp', {
 		{
 			xtype: 'panel',
 			autoWidth: true,
-			height: 120,
+			height: 180,
 			layout: 'hbox',
 
 			items: [{
@@ -175,22 +185,25 @@ Ext.define('CustomApp', {
 		        	}
 				}, {
 		            xtype      : 'radiogroup',
-		            fieldLabel : 'Choose parameter',		            
+		            fieldLabel : 'Choose parameter',
 		            items: [
 		                {
 		                	xtype	  : 'radiofield',				            
 		                    id        : 'radio1',
 		                    name      : 'parameter',
-		                    boxLabel  : 'Release',				            
+		                    boxLabel  : 'Release',
+		                    padding: '0 10 0 0',				            
 		                    inputValue: 'r'
 		                }, {
 		                    boxLabel  : 'Iteration',
 		                    name      : 'parameter',
+		                    padding: '0 10 0 0',			            
 		                    inputValue: 'i',
 		                    id        : 'radio2'
 		                }, {
 		                    boxLabel  : 'Milestone',
 		                    name      : 'parameter',
+		                    padding: '0 10 0 0',			            
 		                    inputValue: 'm',
 		                    id        : 'radio3'
 		                }
@@ -220,6 +233,35 @@ Ext.define('CustomApp', {
 				            	milestoneCombo.show();
 				            	fieldContainer.show();
 				            }				            
+				        },
+				        scope: this
+				    }
+		        }, {
+		        	xtype      : 'radiogroup',
+		            fieldLabel : 'Choose Changed/Added',
+		            columns: 2,	            
+		            items: [
+		                {
+		                	xtype	  : 'radiofield',				            
+		                    id        : 'addedRadio',
+		                    name      : 'addedChanged',
+		                    padding: '0 10 0 0',
+		                    boxLabel  : 'Added',				            
+		                    inputValue: 'a'
+		                }, {
+		                    boxLabel  : 'Changed',
+		                    name      : 'addedChanged',
+		                    padding: '0 10 0 0',
+		                    inputValue: 'c',
+		                    id        : 'changedRario'
+		                }
+		            ],
+		            listeners: {
+				        change: function(field, newValue, oldValue) {
+				            var value = newValue.addedChanged;
+				            this._addedChangedParameter = value;
+
+				            console.log('value radio:', value);
 				        },
 				        scope: this
 				    }
@@ -259,26 +301,63 @@ Ext.define('CustomApp', {
     	if (initDate == '' || endDate == '') {
     		return;
     	}
-    	
+
     	this.myMask.show();
         console.log('loading init features', initDate, endDate);
 
         console.log('search parameter:', this._searchParameter);
 
         var property;
+        var operator = '=';
         var releaseIteration;
-        if ('r' == this._searchParameter) {
-        	property = 'Release';
-        	releaseIteration = this._releaseId;
-        } else if ('i' == this._searchParameter) {
-        	property = 'Iteration';
-        	releaseIteration = this._iterationId;
-        } else if ('m' == this._searchParameter) {
+        if ('m' == this._searchParameter) {
         	property = 'Milestones';
         	releaseIteration = this._milestoneId;
+        	this._loadInitData(projectId, initDate, endDate, property, operator, releaseIteration);
+        } else if ('i' == this._searchParameter) {
+        	property = 'Iteration';
+        	operator = 'in';
+
+        	var promiseIterations = this._loadIterations(projectId);
+
+	        Deft.Promise.all([promiseIterations]).then({
+	        	success: function(records) {
+	                console.log('promises:', records);
+	                var iterations = records[0];
+
+	                this._loadInitData(projectId, initDate, endDate, property, operator, iterations);
+	            },
+	            failure: function(error) {
+	                console.log('error:', error);
+	            },
+	            scope: this
+	        });
+        } else if ('r' == this._searchParameter) {
+        	property = 'Release';
+        	operator = 'in';
+        	var promiseReleases = this._loadReleases(projectId);
+
+	        Deft.Promise.all([promiseReleases]).then({
+	        	success: function(records) {
+	                console.log('promises:', records);
+	                var releases = records[0];
+
+	                this._loadInitData(projectId, initDate, endDate, property, operator, releases);
+	            },
+	            failure: function(error) {
+	                console.log('error:', error);
+	            },
+	            scope: this
+	        });
+
         }
 
-        this.filtersInit = [
+        
+    },
+
+
+    _loadInitData: function(projectId, initDate, endDate, property, operator, releaseIteration) {
+    	this.filtersInit = [
     		{
                 property : '__At',
                 value    : initDate
@@ -295,6 +374,7 @@ Ext.define('CustomApp', {
             },
             {
             	property : property,
+            	operator : operator,
             	value : releaseIteration
             }
     	];
@@ -313,6 +393,7 @@ Ext.define('CustomApp', {
                 'PlanEstimate', 
                 'PortfolioItem',
                 'ScheduleState',
+                'Children',
                 'Milestones',
                 'State', 
                 'Parent', 
@@ -321,6 +402,7 @@ Ext.define('CustomApp', {
                 '_User', 
                 "_ValidFrom", 
                 "_ValidTo"],
+            // filters : this.filtersInit,
             filters : this.filtersInit,
             autoLoad: true,
             sorters: [{
@@ -334,7 +416,7 @@ Ext.define('CustomApp', {
                 load: function(store, data, success) {
                 	console.log('Init Store', store);
                 	this._initItems = data;
-                	this._loadEndData(projectId, initDate, endDate);
+                	this._loadEndData(projectId, initDate, endDate, releaseIteration);
                 	//this._loadEndData();
                 },
                 scope: this
@@ -343,19 +425,19 @@ Ext.define('CustomApp', {
     },
 
 
-    _loadEndData: function (projectId, initDate, endDate) {
+    _loadEndData: function (projectId, initDate, endDate, releaseIteration) {
         console.log('loading end features', initDate, endDate);
 
         console.log('search parameter:', this._searchParameter);
 
         var property;
-        var releaseIteration;
+        var operator = '=';
         if ('r' == this._searchParameter) {
         	property = 'Release';
-        	releaseIteration = this._releaseId;
+        	operator = 'in';
         } else if ('i' == this._searchParameter) {
         	property = 'Iteration';
-        	releaseIteration = this._iterationId;
+        	operator = 'in';
         } else if ('m' == this._searchParameter) {
         	property = 'Milestones';
         	releaseIteration = this._milestoneId;
@@ -379,6 +461,7 @@ Ext.define('CustomApp', {
             },
             {
             	property : property,
+            	operator : operator,
             	value : releaseIteration
             }
     	];
@@ -421,7 +504,7 @@ Ext.define('CustomApp', {
                 	this._endItems = data;
                 	//this._loadEndData();
 
-                	this._findDataAdded();
+                	this._findDataAdded(projectId, initDate, endDate);
                 },
                 scope: this
             }
@@ -429,7 +512,89 @@ Ext.define('CustomApp', {
     },
 
 
-    _findDataAdded: function() {
+    _getFeatureIds: function(data) {
+    	var ids = [];
+
+    	_.each(data, function(record) {
+    		if (record.get('FormattedID').startsWith('F')) {
+            	ids.push(record.get('ObjectID'));    			
+    		}
+        });
+
+        console.log('featureIds', ids);
+
+    	return ids;
+
+    },
+
+
+    _loadChildStories: function(projectId, initDate, featureIds) {
+    	var deferred = Ext.create('Deft.Deferred');
+
+    	if (this._searchParameter == 'i') {
+    		return deferred.resolve();
+    	}
+
+    	var filtersInit = [
+    		{
+                property : '__At',
+                value    : initDate
+            },
+            
+            {
+                property : '_TypeHierarchy',
+                operator : 'in',
+                value    : [ "HierarchicalRequirement"]
+            },
+           	{
+                property : '_ProjectHierarchy',
+                value: projectId
+            },
+            {
+            	property : 'PortfolioItem',
+            	operator : 'in',
+            	value : featureIds
+            }
+    	];
+
+    	var store = Ext.create('Rally.data.lookback.SnapshotStore', {
+            fetch : ['Name', 
+                'FormattedID', 
+                'CreatedBy',
+                'CreationDate',
+                'PlanEstimate', 
+                'PortfolioItem',
+                'ScheduleState',
+                'State', 
+                'Parent', 
+                'Project',
+                '_User', 
+                "_ValidFrom", 
+                "_ValidTo"],
+            // filters : this.filtersInit,
+            filters : filtersInit,
+            autoLoad: true,
+            sorters: [{
+                property: 'ObjectID',
+                direction: 'ASC'
+            }],
+            limit: Infinity,
+            hydrate: ["State", "ScheduleState", 'Project'],
+
+            listeners: {
+                load: function(store, data, success) {
+                	deferred.resolve(data);
+                	console.log('child Store', data);
+                },
+                scope: this
+            }
+        });
+
+        return deferred.promise;
+    },
+
+
+    _findDataAdded: function(projectId, initDate, endDate) {
     	var initIds = [];
     	var endIds = [];
     	var initFeatures = [];
@@ -478,20 +643,46 @@ Ext.define('CustomApp', {
             }
         });
 
+
+
+        var featureIds = [];
+        _.each(this._endItems, function(record) {
+        	if (!Ext.Array.contains(initIds, record.get('ObjectID'))) {
+        		if (record.get('FormattedID').startsWith('F')) {
+	            	featureIds.push(record.get('ObjectID'));    			
+	    		}
+        	}
+        });
+
+
+
         var promise = this._loadParentNames(parentIds);
         var promiseTestCases = this._loadTestCaseNames(testCaseIds);
         var promisePreliminaryEstimate = this._loadPreliminaryEstimates();
         var promiseUsers = this._loadUsers(userIds);
+		var childStoriesPromise = this._loadChildStories(projectId, initDate, featureIds);
 
-        Deft.Promise.all([promise, promiseTestCases, promiseUsers, promisePreliminaryEstimate]).then({
+        Deft.Promise.all([promise, promiseTestCases, promiseUsers, promisePreliminaryEstimate, childStoriesPromise]).then({
             success: function(records) {
             	var parentNames = records[0];
             	var testCaseNames = records[1];
             	var users = records[2];
             	var preliminaryEstimates = records[3];
+            	var childStories = records[4];
+
+            	console.log('child', childStories);
+
+            	//concat endItems with childStories
+            	var addedItems;
+            	if (childStories) {
+            		addedItems = this._endItems.concat(childStories);
+            	} else {
+            		addedItems = this._endItems;
+            	}
+            		
 
             	//find features not planned / items on endItems that were not included in initItems
-		        _.each(this._endItems, function(record) {
+		        _.each(addedItems, function(record) {
 		            var id = record.get('ObjectID');
 		            var state = record.get('State');
 
@@ -630,7 +821,9 @@ Ext.define('CustomApp', {
 
 				this.down('#bodyContainer').removeAll(true);
 
-		        this._buildAddedFeatureGrid(endFeatureStore);
+				if (this._searchParameter != 'i') {
+			        this._buildAddedFeatureGrid(endFeatureStore);
+			    }
 		        this._buildAddedStoriesGrid(endStoriesStore);
 		        this._buildAddedDefectsGrid(endDefectStore);
 
@@ -846,6 +1039,152 @@ Ext.define('CustomApp', {
 		this.down('#bodyContainer').add(mainPanel);
     },
 
+
+    _loadIterations: function(projectId){
+		var iterations = [];
+    	var deferred = Ext.create('Deft.Deferred');
+
+    	//this recovers all iterations from a parent project given the iteration name.
+    	Ext.create('Rally.data.wsapi.Store', {
+		    model: 'Iteration',
+		    autoLoad: true,
+		    context: {
+		        projectScopeUp: false,
+		        projectScopeDown: true,
+		        project: null //null to search all workspace
+		    },
+		    fetch: ['Description', 'Name', 'ObjectID'],
+            limit: Infinity,
+
+			filters: Rally.data.QueryFilter.or([
+
+				Rally.data.QueryFilter.and([
+					{
+						property: 'Project.parent.ObjectID',
+						value: projectId
+					},
+					{
+						property: 'name',
+						value: this._iterationName
+					}	
+				]),
+				
+				Rally.data.QueryFilter.and([
+					{
+						property: 'Project.parent.parent.ObjectID',
+						value: projectId
+					},
+					{
+						property: 'name',
+						value: this._iterationName
+					}	
+				])
+			]),
+
+			listeners: {
+		        load: function(store, data, success) {
+		            //console.log('Store:', store);
+		            console.log('Data:', data);
+
+		            //this checks if the project is a leaf. 
+		            //will return 0 child iterations if so. else will return all iterations id.
+		            if (data.length > 0) {
+		            	console.log('multiple releases found:', data);
+			            var localIterations = [];
+
+                        _.each(data, function(record) {
+                            localIterations.push(record.get('ObjectID'));
+                        });
+
+				        iterations = localIterations;
+				        console.log('iterations: ', iterations);
+				    } else {
+				    	console.log('single iteration  found, using baseiterationId:', this._iterationId);
+				    	iterations = [this._iterationId];
+				    }
+
+				    deferred.resolve(iterations);
+				}, scope: this
+		    }
+        });
+
+        return deferred.promise;
+    },
+
+
+
+    _loadReleases: function(projectId) {
+    	//clear relase filter:
+    	var releases = [];
+    	var deferred = Ext.create('Deft.Deferred');
+
+
+    	//this recovers all releases from a parent project given the release name.
+    	Ext.create('Rally.data.wsapi.Store', {
+		    model: 'Release',
+		    autoLoad: true,
+		    context: {
+		        projectScopeUp: false,
+		        projectScopeDown: true,
+		        project: null //null to search all workspace
+		    },
+		    fetch: ['Description', 'Name', 'ObjectID'],
+            limit: Infinity,
+
+			filters: Rally.data.QueryFilter.or([
+
+				Rally.data.QueryFilter.and([
+					{
+						property: 'Project.parent.ObjectID',
+						value: projectId
+					},
+					{
+						property: 'name',
+						value: this._releaseName
+					}	
+				]),
+				
+				Rally.data.QueryFilter.and([
+					{
+						property: 'Project.parent.parent.ObjectID',
+						value: projectId
+					},
+					{
+						property: 'name',
+						value: this._releaseName
+					}	
+				])
+			]),
+
+			listeners: {
+		        load: function(store, data, success) {
+		            //console.log('Store:', store);
+		            console.log('Data:', data);
+
+		            //this checks if the project is a leaf. 
+		            //will return 0 child releases if so. else will return all releases id.
+		            if (data.length > 0) {
+		            	console.log('multiple releases found:', data);
+			            var localReleases = [];
+
+			            _.each(data, function(record) {
+				        	localReleases.push(record.get('ObjectID'));
+				        });
+
+				        releases = localReleases;
+				        console.log('releases: ', releases);
+				    } else {
+				    	console.log('single release found, using baseReleaseId:', this._releaseId);
+				    	releases = [this._releaseId];
+				    }
+
+				    deferred.resolve(releases);
+				}, scope: this
+		    }
+        });
+
+        return deferred.promise;
+    },
 
 
     _loadParentNames: function(parentIds) {
