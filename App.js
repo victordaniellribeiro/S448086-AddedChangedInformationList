@@ -859,6 +859,11 @@ Ext.define('CustomApp', {
                     tpl: Ext.create('Rally.ui.renderer.template.FormattedIDTemplate')
                 },
                 {
+                    text: 'Name',
+                    dataIndex: 'Name',
+                    flex: 2
+                },
+                {
                     text: 'Parent',
                     dataIndex: 'Parent',
                     flex: 3
@@ -928,6 +933,11 @@ Ext.define('CustomApp', {
                     tpl: Ext.create('Rally.ui.renderer.template.FormattedIDTemplate')
                 },
                 {
+                    text: 'Name',
+                    dataIndex: 'Name',
+                    flex: 2
+                },
+                {
                     text: 'Parent',
                     dataIndex: 'Parent',
                     flex: 3
@@ -990,6 +1000,11 @@ Ext.define('CustomApp', {
                     text: 'ID',
                     dataIndex: 'FormattedID',
                     tpl: Ext.create('Rally.ui.renderer.template.FormattedIDTemplate')
+                },
+                {
+                    text: 'Name',
+                    dataIndex: 'Name',
+                    flex: 2
                 },
                 {
                     text: 'Parent',
